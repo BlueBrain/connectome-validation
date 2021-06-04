@@ -11,10 +11,13 @@ import yaml
 import bluepy.v2 as bluepy
 
 
-def reformat(results):
+def reformat(results, include_samples=False):
     idx = pandas.MultiIndex.from_frame(results[['from', 'to']])
     series_mn = pandas.Series(results['mean'].values, index=idx)
     series_sd = pandas.Series(results['std'].values, index=idx)
+    if include_samples:
+        series_smpl = pandas.Series(results["sample"].values, index=idx)
+        return series_mn, series_sd, series_smpl
     return series_mn, series_sd
 
 
@@ -25,10 +28,10 @@ def get_syns_con_mdl(circ_path, target_name):
         Please load the connectome-tools module!""")
         sys.exit(2)
     print("Calling connectome-stats. This might take a while...")
-    output = subprocess.check_output(["connectome-stats", "nsyn-per-connection", "--short"] + pre_post + [circ_path])
+    output = subprocess.check_output(["connectome-stats", "nsyn-per-connection"] + pre_post + [circ_path])
     results = pandas.read_csv(io.StringIO(str(output, "utf-8")), sep='\s+')
 
-    return reformat(results)
+    return reformat(results, include_samples=True)
 
 
 def get_bioname(circ_path):
@@ -71,12 +74,13 @@ def validate(circ_path, target_name, out_fn, bio_data=None):
     mn_bio, sd_bio = get_bio_data(circ_path, bio_data=bio_data)
     mn_bio.name = "Mean (ref.)"
     sd_bio.name = "Std (ref.)"
-    mn_mdl, sd_mdl = get_syns_con_mdl(circ_path, target_name)
+    mn_mdl, sd_mdl, smpl_mdl = get_syns_con_mdl(circ_path, target_name)
     mn_mdl.name = "Mean (data)"
     sd_mdl.name = "Std (data)"
+    smpl_mdl.name = "Samples (data)"
     err = 100 * (mn_mdl - mn_bio) / (0.5 * (sd_mdl + sd_bio))
     err.name = "Error"
-    result = pandas.concat([mn_mdl, sd_mdl, mn_bio, sd_bio, err], axis=1)
+    result = pandas.concat([mn_mdl, sd_mdl, mn_bio, sd_bio, smpl_mdl, err], axis=1)
     result.to_csv(out_fn)
 
 
